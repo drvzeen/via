@@ -158,6 +158,79 @@
     margin-top: 12px; background: transparent; color: #ff453a; font-weight: 590;
   }
   #closeBtn:hover { background: rgba(255,69,58,0.12); }
+
+  /* === Проводник — полноэкранный лист; золотая рамка = рамка ВСЕГО сайта === */
+  #explorerPage {
+    position: fixed; inset: 0; z-index: 22;
+    background-color: #0a0a0a;
+    display: none;
+  }
+  #explorerPage.open { display: block; }
+  /* НИЗ: видео-фон на весь экран (рамка сверху маскирует до проёма) */
+  #exVideo {
+    position: absolute; inset: 0; z-index: 1;
+    width: 100%; height: 100%; object-fit: cover;
+  }
+  /* СЕРЕДИНА: меню в проёме (инсеты задаёт JS) */
+  .ex-inner {
+    position: absolute; z-index: 2;
+    top: 14%; right: 15%; bottom: 14%; left: 15%;
+    display: flex; flex-direction: column; justify-content: center; overflow-y: auto;
+    background: rgba(0,0,0,0.28);                    /* лёгкая подложка для читаемости */
+    color: #f2e9d2;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  /* ВЕРХ: рамка с прозрачным центром, поверх всего, клики проходят сквозь */
+  #exFrame {
+    position: absolute; inset: 0; z-index: 3; pointer-events: none;
+    background-size: 100% 100%; background-repeat: no-repeat; background-position: center;
+  }
+  .ex-inner::-webkit-scrollbar { width: 0; }
+  .ex-titlebar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 2px 2px 10px; font-size: 13px; letter-spacing: 0.2em;
+  }
+  .ex-title { color: #f4d78a; text-shadow: 0 0 10px rgba(244,215,138,0.4); font-weight: 700; }
+  .ex-close {
+    background: transparent; border: none; color: #d9a441;
+    font-size: 15px; cursor: pointer; font-family: inherit;
+  }
+  .ex-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 4px 2px; }
+  .ex-item {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 16px 8px; cursor: pointer;
+    background: rgba(244,215,138,0.05); border: 1px solid rgba(244,215,138,0.22);
+    border-radius: 4px; color: #f2e9d2; font-family: inherit;
+    font-size: 12px; letter-spacing: 0.1em;
+    transition: background .15s, border-color .15s, transform .1s;
+  }
+  .ex-item:hover { background: rgba(244,215,138,0.14); border-color: #f4d78a; }
+  .ex-item:active { transform: scale(0.97); }
+  .ex-ico { font-size: 26px; line-height: 1; text-shadow: 0 0 10px rgba(244,215,138,0.4); }
+  .ex-name { opacity: 0.9; }
+  .ex-status {
+    margin-top: 12px; padding: 8px 2px 2px; font-size: 11px;
+    color: #b89a5a; letter-spacing: 0.1em; min-height: 16px;
+  }
+
+  /* === CRT-переход (схлопывание в линию, ЭЛТ вкл/выкл) === */
+  #crt {
+    position: fixed; inset: 0; z-index: 30; pointer-events: none;
+    background: #060606; opacity: 0; visibility: hidden;
+  }
+  #crt.on { opacity: 1; visibility: visible; }
+  #crt .bar {
+    position: absolute; left: 0; right: 0; top: 50%;
+    transform: translateY(-50%);
+    height: 100%; width: 100%;
+    background: #eaf6ff;
+    box-shadow: 0 0 40px 14px rgba(190,235,255,0.85);
+  }
+  #crt::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0 1px, transparent 1px 3px);
+  }
+
 </style>
 </head>
 <body>
@@ -266,6 +339,28 @@
     <button id="pauseBtn">Пауза</button>
   </div>
   <button id="closeBtn">Закрыть</button>
+</div>
+
+<!-- CRT-переход: схлопывание в линию -->
+<div id="crt"><div class="bar"></div></div>
+
+<!-- Проводник — полноэкранный лист; рамка = фон, видео в проёме -->
+<div id="explorerPage">
+  <video id="exVideo" src="brand_assets/video5357368379114041753.mp4" muted loop playsinline></video>
+  <div class="ex-inner">
+    <div class="ex-titlebar">
+      <span class="ex-title">VIA</span>
+      <button class="ex-close" id="exClose">✕</button>
+    </div>
+    <div class="ex-grid">
+      <button class="ex-item" data-target="settings"><span class="ex-ico">⚙</span><span class="ex-name">НАСТРОЙКИ</span></button>
+      <button class="ex-item" data-target="about"><span class="ex-ico">◈</span><span class="ex-name">ОБО МНЕ</span></button>
+      <button class="ex-item" data-target="music"><span class="ex-ico">♪</span><span class="ex-name">МУЗЫКА</span></button>
+      <button class="ex-item" data-target="gallery"><span class="ex-ico">▦</span><span class="ex-name">ГАЛЕРЕЯ</span></button>
+    </div>
+    <div class="ex-status" id="exStatus">— выбери раздел —</div>
+  </div>
+  <div id="exFrame"></div>
 </div>
 
 <script>
@@ -666,6 +761,8 @@ logoImg.onload = () => { requestAnimationFrame(draw); };
 // === Джойстик-толчок (невидимый, без прямого перетаскивания) ===
 let activeLogo = null;
 let grabStartX = 0, grabStartY = 0, grabStartT = 0;
+let tapTimer = null;
+const DBL_MS = 280;
 
 function findNearestLogo(mx, my) {
   let best = null, bestDist = Infinity;
@@ -697,8 +794,9 @@ canvas.addEventListener('pointerup', (e) => {
   const totalTime = performance.now() - grabStartT;
 
   if (totalDist < 10 && totalTime < 350) {
-    panel.classList.add('open');
+    handleTap();
   } else {
+    if (tapTimer) { clearTimeout(tapTimer); tapTimer = null; }
     let pullX = mx - activeLogo.cx;
     let pullY = my - activeLogo.cy;
     let pullLen = Math.hypot(pullX, pullY);
@@ -788,6 +886,144 @@ document.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
   }
 }, true);
+
+// === Проводник: одиночный тап → проводник, двойной тап → настройки ===
+const explorerPage = document.getElementById('explorerPage');
+const exStatus = document.getElementById('exStatus');
+
+function handleTap() {
+  if (tapTimer) {                       // второй тап пришёл вовремя → двойной
+    clearTimeout(tapTimer); tapTimer = null;
+    openSettings();
+  } else {                              // ждём: вдруг будет второй тап
+    tapTimer = setTimeout(() => {
+      tapTimer = null;
+      openExplorer();                   // второго не было → одиночный
+    }, DBL_MS);
+  }
+}
+
+// CRT-переход: экран схлопывается в яркую линию → чернота (меняем «лист») →
+// разворачивается обратно (ЭЛТ включается). swap() вызывается в «черноте».
+const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const crt = document.getElementById('crt');
+const crtBar = crt.querySelector('.bar');
+function crtTransition(swap) {
+  if (reduceMotion()) { if (swap) swap(); return; }
+  crtBar.style.transition = 'none';
+  crtBar.style.height = '100%';
+  crtBar.style.width = '100%';
+  crtBar.style.opacity = '1';
+  crt.classList.add('on');
+  void crt.offsetWidth;
+  crtBar.style.transition = 'height .16s ease-in';   // фаза 1 — в линию
+  crtBar.style.height = '3px';
+  setTimeout(() => {
+    if (swap) swap();                                 // меняем «лист» под чернотой
+    crtBar.style.transition = 'width .12s ease-in, opacity .12s ease-in';
+    crtBar.style.width = '14px';                       // фаза 2 — линия в точку
+    crtBar.style.opacity = '0.9';
+    setTimeout(() => {
+      crtBar.style.transition = 'none';               // фаза 3 — ЭЛТ включается
+      crtBar.style.width = '100%';
+      crtBar.style.height = '3px';
+      crtBar.style.opacity = '1';
+      void crt.offsetWidth;
+      crtBar.style.transition = 'height .18s ease-out';
+      crtBar.style.height = '100%';
+      setTimeout(() => {
+        crt.style.transition = 'opacity .12s ease-out, visibility 0s linear .12s';
+        crt.classList.remove('on');
+        setTimeout(() => { crt.style.transition = ''; }, 160);
+      }, 120);
+    }, 130);
+  }, 160);
+}
+
+function openExplorer() {
+  if (panel.classList.contains('open')) return;       // не поверх настроек
+  crtTransition(() => {
+    refreshFrame();
+    explorerPage.classList.add('open');
+    exVideo.play().catch(() => {});                   // видео-фон (без звука)
+    startMusic();                                     // музыка (тап = разрешение на звук)
+  });
+}
+function closeExplorer() {
+  crtTransition(() => { explorerPage.classList.remove('open'); stopMusic(); });
+}
+function openSettings() {
+  explorerPage.classList.remove('open');              // без анимации — сразу к настройкам
+  stopMusic();
+  panel.classList.add('open');
+}
+
+document.getElementById('exClose').addEventListener('click', closeExplorer);
+
+document.querySelectorAll('.ex-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const target = item.dataset.target;
+    if (target === 'settings') {
+      openSettings();
+    } else {
+      exStatus.textContent = '// ' + item.querySelector('.ex-name').textContent + ' — в разработке';
+    }
+  });
+});
+
+// === Рамка (3 формата) + видео-фон в чёрном проёме ===
+// Проёмы замерены точно (в пикселях) и вписаны жёстко — рамка тянется на весь экран
+// (background-size:100% 100%), поэтому % картинки = % экрана, видео и меню ложатся в проём.
+const exInner = document.querySelector('.ex-inner');
+const exVideo = document.getElementById('exVideo');
+const exFrame = document.getElementById('exFrame');
+// Слои: видео (низ) → меню (середина) → рамка с прозрачным центром (верх, маскирует).
+// ins — проём (замерен точно), под него позиционируем меню; видео на весь экран.
+const FRAMES = {
+  land: { src: 'brand_assets/frame-land.png', ins: { top: 13.76, right: 6.37,  bottom: 12.79, left: 6.48  } },
+  med:  { src: 'brand_assets/frame-med.png',  ins: { top: 12.76, right: 13.98, bottom: 12.22, left: 14.84 } },
+  tall: { src: 'brand_assets/frame-tall.png', ins: { top: 6.33,  right: 12.73, bottom: 6.52,  left: 13.77 } },
+};
+function pickFrame() {
+  const r = window.innerWidth / window.innerHeight;
+  if (r >= 1.2) return FRAMES.land;
+  if (r >= 0.7) return FRAMES.med;
+  return FRAMES.tall;
+}
+function applyHole(ins) {
+  exInner.style.top = ins.top + '%';       exInner.style.right = ins.right + '%';
+  exInner.style.bottom = ins.bottom + '%'; exInner.style.left = ins.left + '%';
+}
+let currentFrame = '';
+function refreshFrame() {
+  const fr = pickFrame();
+  if (fr.src === currentFrame) return;
+  currentFrame = fr.src;
+  exFrame.style.backgroundImage = "url('" + fr.src + "')";
+  applyHole(fr.ins);
+}
+window.addEventListener('resize', refreshFrame);
+refreshFrame();
+
+// === Музыка: локальные треки, играют по очереди при входе в проводник ===
+const TRACKS = [
+  'Grim Freestyle - No ID.m4a',
+  'AAP Rocky - Best Of Me.mp3',
+  'AAP ROCKY- FUCK 12.mp3',
+].map(n => 'brand_assets/' + encodeURIComponent(n));
+const exAudio = new Audio();
+exAudio.volume = 0.6;
+let trackIdx = 0;
+exAudio.addEventListener('ended', () => {
+  trackIdx = (trackIdx + 1) % TRACKS.length;
+  exAudio.src = TRACKS[trackIdx];
+  exAudio.play().catch(() => {});
+});
+function startMusic() {
+  if (!exAudio.src) exAudio.src = TRACKS[trackIdx];
+  exAudio.play().catch(() => {});
+}
+function stopMusic() { exAudio.pause(); }
 </script>
 </body>
 </html>
